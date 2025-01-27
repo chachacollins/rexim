@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+
 typedef struct {
   uint8_t *buffer;
   size_t buffer_size;
@@ -110,3 +111,33 @@ static inline string_t get_string_slice(string_t *str, size_t begin, size_t end,
   slice.len = len;
   return slice;
 }
+
+#define ArrayList(T)                                                           \
+  typedef struct {                                                             \
+    T *items;                                                                  \
+    size_t len;                                                                \
+    size_t capacity;                                                           \
+  } ArrayList_##T;                                                             \
+                                                                               \
+  ArrayList_##T ArrayList_##T##_init(Arena *arena) {                           \
+    size_t initialCapacity = 1024;                                             \
+    ArrayList_##T list;                                                        \
+                                                                               \
+    list.items =                                                               \
+        (T *)arena_alloc(arena, sizeof(T) * initialCapacity, _Alignof(T));     \
+    list.len = 0;                                                              \
+    list.capacity = initialCapacity;                                           \
+    return list;                                                               \
+  }                                                                            \
+  void ArrayList_##T##_append(ArrayList_##T *arraylist, T data,                \
+                              Arena *arena) {                                  \
+    if (arraylist->len >= arraylist->capacity) {                               \
+      void *new_buffer =                                                       \
+          (T *)arena_alloc(arena, arraylist->capacity * 2, _Alignof(T));       \
+      memcpy(new_buffer, arraylist->items, arraylist->len);                    \
+      arraylist->items = new_buffer;                                           \
+      arraylist->capacity *= 2;                                                \
+    }                                                                          \
+    arraylist->items[arraylist->len] = data;                                   \
+    arraylist->len++;                                                          \
+  }
