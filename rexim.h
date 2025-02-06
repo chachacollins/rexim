@@ -191,3 +191,10 @@ static inline string_t read_file_to_string(const char *filepath, Arena *arena) {
   fclose(file);
   return str;
 }
+
+static inline string_t write_to_file(const char *filepath,
+                                     const char *content) {
+  FILE *file = fopen(filepath, "w");
+  fprintf(file, "%s", content);
+  fclose(file);
+}
