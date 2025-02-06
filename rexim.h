@@ -16,7 +16,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 typedef struct {
   uint8_t *buffer;
   size_t buffer_size;
@@ -53,12 +52,20 @@ static inline void *arena_alloc(Arena *arena, size_t size, size_t alignment) {
     fprintf(stderr, "Size or arena not provided\n");
     exit(1);
   }
+
+  if (size > SIZE_MAX / 2) {
+    fprintf(stderr, "Allocation size too large\n");
+    exit(1);
+  }
+
   size_t mask = alignment - 1;
   size_t misalignment = arena->current_offset & mask;
   size_t adjustment = (misalignment > 0) ? (alignment - misalignment) : 0;
   size_t aligned_offset = arena->current_offset + adjustment;
+
   if (aligned_offset + size > arena->buffer_size) {
-    uint8_t *new_buffer = (uint8_t *)malloc(arena->buffer_size * 2);
+    size_t new_size = arena->buffer_size * 2;
+    uint8_t *new_buffer = (uint8_t *)calloc(1, new_size);
     if (!new_buffer) {
       fprintf(stderr, "Failed to reallocate arena\n");
       exit(1);
@@ -66,10 +73,12 @@ static inline void *arena_alloc(Arena *arena, size_t size, size_t alignment) {
     memcpy(new_buffer, arena->buffer, arena->buffer_size);
     free(arena->buffer);
     arena->buffer = new_buffer;
-    arena->buffer_size *= 2;
+    arena->buffer_size = new_size;
   }
+
   arena->prev_offset = arena->current_offset;
   arena->current_offset = aligned_offset + size;
+  return arena->buffer + aligned_offset;
   return arena->buffer + aligned_offset;
 }
 static inline void arena_destroy(Arena *arena) {
@@ -112,6 +121,13 @@ static inline string_t get_string_slice(string_t *str, size_t begin, size_t end,
   return slice;
 }
 
+static inline string_t string_from(char *str) {
+  string_t string;
+  string.items = str;
+  string.len = strlen(str);
+  return string;
+}
+
 #define ArrayList(T)                                                           \
   typedef struct {                                                             \
     T *items;                                                                  \
@@ -141,3 +157,37 @@ static inline string_t get_string_slice(string_t *str, size_t begin, size_t end,
     arraylist->items[arraylist->len] = data;                                   \
     arraylist->len++;                                                          \
   }
+
+/*
+  FILE IO STUFF
+*/
+
+static inline size_t file_length(FILE *file) {
+  fseek(file, 0L, SEEK_END);
+  size_t len = ftell(file);
+  fseek(file, 0L, SEEK_SET);
+  return len;
+}
+static inline string_t read_file_to_string(const char *filepath, Arena *arena) {
+  FILE *file = fopen(filepath, "rb");
+  if (!file) {
+    fprintf(stderr, "Could not open file: %s\n", filepath);
+    exit(1);
+  }
+
+  size_t len = file_length(file);
+  char *buffer =
+      (char *)arena_alloc(arena, sizeof(char) * (len + 1), _Alignof(char));
+
+  size_t read = fread(buffer, 1, len, file);
+  if (read != len) {
+    fprintf(stderr, "Could not read all the file to buffer\n");
+    exit(1);
+  }
+
+  buffer[len] = '\0';
+  string_t str = {.items = buffer, .len = len};
+
+  fclose(file);
+  return str;
+}
